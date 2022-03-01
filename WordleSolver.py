@@ -1,4 +1,5 @@
 import itertools
+import math
 import sys
 import re
 from collections import defaultdict
@@ -28,7 +29,7 @@ def getWordList(filename) -> list[str]:
 
 def atLeast_filter(word: str, filters: list[tuple[str, int]]) -> bool:
     """
-    function checks if the word has each letter at least the number of occurrences specified in the filters.
+    function checks if the word has each letter AT LEAST the number of occurrences specified in the filters.
     :param word: a string.
     :param filters: a list of tuples, each containing a character and number of occurrences.
     :return: true if word follows the filters, false otherwise.
@@ -39,7 +40,7 @@ def atLeast_filter(word: str, filters: list[tuple[str, int]]) -> bool:
 
 def exactly_filter(word: str, filters: list[tuple[str, int]]) -> bool:
     """
-    function checks if the word has each letter at least the number of occurrences specified in the filters.
+    function checks if the word has each letter EXACTLY the number of occurrences specified in the filters.
     :param word: a string.
     :param filters: a list of tuples, each containing a character and number of occurrences.
     :return: true if word follows the filters, false otherwise.
@@ -48,7 +49,7 @@ def exactly_filter(word: str, filters: list[tuple[str, int]]) -> bool:
                for character, frequency in filters)
 
 
-def calculateExpectedValue(word, wordlist) -> float:
+def calculateEntropy(word, wordlist) -> float:
     """
     function calculates what is the expected information that will be given by the word for a given list of words.
     :param word: word to calculate expected information from.
@@ -56,6 +57,7 @@ def calculateExpectedValue(word, wordlist) -> float:
     :return: float, what is the expected information. lower is better.
     """
     results = []
+    total_words = len(wordlist)
     # iterate over all possible patterns (grey, yellow, green)
     for i in range(243):
         pattern = KEYWORDS[i]
@@ -67,7 +69,7 @@ def calculateExpectedValue(word, wordlist) -> float:
         # letters that have to appear exactly number of times.
         exactly = defaultdict(int)
         # letters that have to appear at least number of times
-        atleast = defaultdict(int)
+        at_least = defaultdict(int)
         greys = []
         for j in range(5):
             if pattern[j] == GREY:
@@ -75,30 +77,33 @@ def calculateExpectedValue(word, wordlist) -> float:
                 greys.append(word[j])
             elif pattern[j] == YELLOW:
                 letters[j] = letters[j].replace(word[j], "")
-                atleast[word[j]] += 1
+                at_least[word[j]] += 1
             elif pattern[j] == GREEN:
                 letters[j] = word[j]
-                atleast[word[j]] += 1
+                at_least[word[j]] += 1
         # if a letter was greyed & yellowed / green, move it to "exactly".
         for letter in greys:
-            if atleast[letter] > 0:
-                exactly[letter] = atleast[letter]
+            if at_least[letter] > 0:
+                exactly[letter] = at_least[letter]
                 greys.remove(letter)
         # remove all completely greyed chars from possible letters.
         for j in range(5):
             letters[j] = ''.join('' if c in greys else c for c in letters[j])
-        atLeast_filters = [(k, v) for k, v in atleast.items() if v > 0]
+        atLeast_filters = [(k, v) for k, v in at_least.items() if v > 0]
         exactly_filters = [(k, v) for k, v in exactly.items() if v > 0]
         # filter out words that don't complie with possible chars for each letter.
-        r = REGEX.format(a=letters[0], b=letters[1], c=letters[2], d=letters[3], e=letters[4])
-        regex = re.compile(r)
-        newWordList = list(filter(regex.match, wordlist))
+        r = re.compile(REGEX.format(a=letters[0], b=letters[1], c=letters[2], d=letters[3], e=letters[4]))
+        filtered_words = list(filter(r.match, wordlist))
         # filter out based on atLeast and exactly dicts.
-        newWordList = list(filter(lambda word: atLeast_filter(word, atLeast_filters), newWordList))
-        newWordList = list(filter(lambda word: exactly_filter(word, exactly_filters), newWordList))
-        results.append(len(newWordList))
-    average = sum(results) / len(results)
-    return average
+        filtered_words = list(filter(lambda word: atLeast_filter(word, atLeast_filters), filtered_words))
+        filtered_words = list(filter(lambda word: exactly_filter(word, exactly_filters), filtered_words))
+        probability = len(filtered_words) / total_words
+        if probability != 0:
+            results.append(probability * math.log2(1/probability))
+        else:
+            results.append(0)
+    entropy = sum(results)
+    return entropy
 
 
 def solve(wordList):
@@ -109,5 +114,5 @@ def solve(wordList):
 if __name__ == '__main__':
     filename = sys.argv[1]
     words = getWordList(filename)
-    print(calculateExpectedValue("speed", words))
+    print(calculateEntropy("speed", words))
     print(words)
