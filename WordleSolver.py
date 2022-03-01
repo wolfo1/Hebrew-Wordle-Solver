@@ -27,6 +27,22 @@ def getWordList(filename) -> list[str]:
     return wordlist
 
 
+def word_filter(word, atleast, exactly, letters):
+    occurrences = defaultdict(int)
+    for i in range(5):
+        if word[i] not in letters[i]:
+            return False
+        occurrences[word[i]] += 1
+    for key in occurrences:
+        least = atleast[key]
+        exact = exactly[key]
+        if least > 0 and occurrences[word] < least:
+            return False
+        if 0 < exact != occurrences[word]:
+            return False
+    return True
+
+
 def atLeast_filter(word: str, filters: list[tuple[str, int]]) -> bool:
     """
     function checks if the word has each letter AT LEAST the number of occurrences specified in the filters.
@@ -49,6 +65,46 @@ def exactly_filter(word: str, filters: list[tuple[str, int]]) -> bool:
                for character, frequency in filters)
 
 
+def filterPattern(pattern, word, wordlist) -> list[str]:
+    letters = [HEBREW_LETTERS, HEBREW_LETTERS, HEBREW_LETTERS, HEBREW_LETTERS, HEBREW_LETTERS]
+    # letters = [ENGLISH_LETTERS, ENGLISH_LETTERS, ENGLISH_LETTERS, ENGLISH_LETTERS, ENGLISH_LETTERS]
+    # letters that have to appear exactly number of times.
+    exactly = defaultdict(int)
+    # letters that have to appear at least number of times
+    at_least = defaultdict(int)
+    greys = []
+    for j in range(5):
+        if pattern[j] == GREY:
+            letters[j] = letters[j].replace(word[j], "")
+            greys.append(word[j])
+        elif pattern[j] == YELLOW:
+            if word[j] in greys:
+                return []
+            letters[j] = letters[j].replace(word[j], "")
+            at_least[word[j]] += 1
+        elif pattern[j] == GREEN:
+            letters[j] = word[j]
+            at_least[word[j]] += 1
+    # if a letter was greyed & yellowed / green, move it to "exactly".
+    for letter in greys:
+        if at_least[letter] > 0:
+            exactly[letter] = at_least[letter]
+    greys = [x for x in greys if not at_least[x] > 0]
+    # remove all completely greyed chars from possible letters.
+    for j in range(5):
+        letters[j] = ''.join('' if c in greys else c for c in letters[j])
+    atLeast_filters = [(k, v) for k, v in at_least.items() if v > 0]
+    exactly_filters = [(k, v) for k, v in exactly.items() if v > 0]
+    # filter out words that don't comply with possible chars for each letter.
+    r = re.compile(REGEX.format(a=letters[0], b=letters[1], c=letters[2], d=letters[3], e=letters[4]))
+    filtered_words = list(filter(r.match, wordlist))
+    # filter out based on atLeast and exactly dicts.
+    filtered_words = list(filter(lambda word: atLeast_filter(word, atLeast_filters), filtered_words))
+    filtered_words = list(filter(lambda word: exactly_filter(word, exactly_filters), filtered_words))
+    # filtered_words = list(filter(lambda word: word_filter(word, at_least, exactly, letters), wordlist))
+    return filtered_words
+
+
 def calculateEntropy(word, wordlist) -> float:
     """
     function calculates what is the expected information that will be given by the word for a given list of words.
@@ -61,58 +117,50 @@ def calculateEntropy(word, wordlist) -> float:
     # iterate over all possible patterns (grey, yellow, green)
     for i in range(243):
         pattern = KEYWORDS[i]
-        # letters = [HEBREW_LETTERS, HEBREW_LETTERS, HEBREW_LETTERS, HEBREW_LETTERS, HEBREW_LETTERS]
-        letters = [ENGLISH_LETTERS, ENGLISH_LETTERS, ENGLISH_LETTERS, ENGLISH_LETTERS, ENGLISH_LETTERS]
-        # holds how many occurrences each letter has to appear in the solution. 0 is unknown.
-        # mustHave = {"א": 0, "ב": 0, "ג": 0, "ד": 0, "ה": 0, "ו": 0, "ז": 0, "ח": 0, "ט": 0, "י": 0, "כ": 0,
-        #            "ל": 0, "מ": 0, "נ": 0, "ס": 0, "ע": 0, "פ": 0, "צ": 0, "ק": 0, "ר": 0, "ש": 0, "ת": 0}
-        # letters that have to appear exactly number of times.
-        exactly = defaultdict(int)
-        # letters that have to appear at least number of times
-        at_least = defaultdict(int)
-        greys = []
-        for j in range(5):
-            if pattern[j] == GREY:
-                letters[j] = letters[j].replace(word[j], "")
-                greys.append(word[j])
-            elif pattern[j] == YELLOW:
-                letters[j] = letters[j].replace(word[j], "")
-                at_least[word[j]] += 1
-            elif pattern[j] == GREEN:
-                letters[j] = word[j]
-                at_least[word[j]] += 1
-        # if a letter was greyed & yellowed / green, move it to "exactly".
-        for letter in greys:
-            if at_least[letter] > 0:
-                exactly[letter] = at_least[letter]
-        greys = [x for x in greys if not at_least[x] > 0]
-        # remove all completely greyed chars from possible letters.
-        for j in range(5):
-            letters[j] = ''.join('' if c in greys else c for c in letters[j])
-        atLeast_filters = [(k, v) for k, v in at_least.items() if v > 0]
-        exactly_filters = [(k, v) for k, v in exactly.items() if v > 0]
-        # filter out words that don't complie with possible chars for each letter.
-        r = re.compile(REGEX.format(a=letters[0], b=letters[1], c=letters[2], d=letters[3], e=letters[4]))
-        filtered_words = list(filter(r.match, wordlist))
-        # filter out based on atLeast and exactly dicts.
-        filtered_words = list(filter(lambda word: atLeast_filter(word, atLeast_filters), filtered_words))
-        filtered_words = list(filter(lambda word: exactly_filter(word, exactly_filters), filtered_words))
+        filtered_words = filterPattern(pattern, word, wordlist)
         probability = len(filtered_words) / total_words
         if probability != 0:
-            results.append(probability * math.log2(1/probability))
-        else:
-            results.append(0)
+            results.append(probability * math.log2(1 / probability))
     entropy = sum(results)
     return entropy
 
 
-def solve(wordList):
-    guess = input("enter word:")
-    result = input("enter result, 0 is grey, 1 orange, 2 green: (i.e 00001)")
+def solve(solution, wordlist):
+    for i in range(5):
+        max_entropy = 0
+        max_word = ""
+        for word in wordlist:
+            entropy = calculateEntropy(word, wordlist)
+            if entropy > max_entropy:
+                max_word = word
+                max_entropy = entropy
+        pattern = ""
+        yellows = []
+        for j in range(5):
+            if max_word[j] == solution[j]:
+                pattern += GREEN
+            elif max_word[j] in solution:
+                if max_word[j] in yellows:
+                    pattern += GREY
+                else:
+                    pattern += YELLOW
+            else:
+                pattern += GREY
+        if pattern == "22222":
+            return i
+        wordlist = filterPattern(pattern, max_word, wordlist)
+    return 0
 
 
 if __name__ == '__main__':
     filename = sys.argv[1]
     words = getWordList(filename)
-    print(calculateEntropy("speed", words))
-    print(words)
+    # test entire solve. currently 26m
+    print(solve("מגבלה", words))
+    """
+    results = []
+    for word in words:
+        results.append((word, calculateEntropy(word, words)))
+    results.sort(key=lambda x: x[1], reverse=True)
+    print(results)
+    """
