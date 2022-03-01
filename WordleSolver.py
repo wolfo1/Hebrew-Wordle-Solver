@@ -85,7 +85,7 @@ def calculateEntropy(word, wordlist) -> float:
         for letter in greys:
             if at_least[letter] > 0:
                 exactly[letter] = at_least[letter]
-                greys.remove(letter)
+        greys = [x for x in greys if not at_least[x] > 0]
         # remove all completely greyed chars from possible letters.
         for j in range(5):
             letters[j] = ''.join('' if c in greys else c for c in letters[j])
