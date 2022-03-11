@@ -19,7 +19,6 @@ REGEX = "[{a}]{{1}}[{b}]{{1}}[{c}]{{1}}[{d}]{{1}}[{e}]{{1}}"
 GREEN = '2'
 YELLOW = '1'
 GREY = '0'
-PLACEHOLDER = "X"
 
 
 def get_word_list(filename: str) -> list[str]:
@@ -35,6 +34,11 @@ def get_word_list(filename: str) -> list[str]:
 
 
 def process_hebrew_word(word: str) -> str:
+    """
+    turn the last letter to finalised ("ot sofit") later or vice versa.
+    :param word: a hebrew word
+    :return: the word with a finalised / de-finalised last letter.
+    """
     if word[-1] in REGULAR_TO_FINAL:
         return word[:-1] + REGULAR_TO_FINAL[word[-1]]
     elif word[-1] in FINAL_TO_REGULAR:
@@ -54,6 +58,13 @@ def exactly_filter(word: str, filters: list[tuple[str, int]]) -> bool:
 
 
 def get_pattern(guess: str, solution: str) -> str:
+    """
+    returns the pattern from a given guess and a given solution based on the
+    wordle rules.
+    :param guess: the guess
+    :param solution: the solution
+    :return: a string of 5 {0,1,2} of the pattern.
+    """
     pattern = [GREY] * len(guess)
     letter_counts = {}
     # get the count for each letter in the solution
@@ -67,7 +78,7 @@ def get_pattern(guess: str, solution: str) -> str:
         if guess[i] == solution[i]:
             pattern[i] = GREEN
             letter_counts[guess[i]] -= 1
-    # mark all yellow an grey letters.
+    # mark all yellow letters.
     for i in range(len(guess)):
         if guess[i] in letter_counts:
             if letter_counts[guess[i]] > 0 and pattern[i] == GREY:
@@ -78,43 +89,44 @@ def get_pattern(guess: str, solution: str) -> str:
 
 class WordleSolver:
     def __init__(self, hebrew: bool = False):
-        self.guess = [''] * WORD_LENGTH
-        self.excluded_for_letter = [''] * WORD_LENGTH
         self.patterns = {''.join(i): 0 for i in itertools.product("012", repeat=WORD_LENGTH)}
         self.hebrew = hebrew
         if self.hebrew:
             self.guesses = get_word_list(HEBREW_GUESSES)
             self.solutions = get_word_list(HEBREW_SOLUTIONS)
-            self.letters = [HEBREW_LETTERS] * WORD_LENGTH
             self.first_words = FIRST_HEBREW_GUESS
         else:
             self.guesses = get_word_list(ENGLISH_GUESSES)
             self.solutions = get_word_list(ENGLISH_GUESSES)
-            self.letters = [ENGLISH_LETTERS] * WORD_LENGTH
             self.first_words = FIRST_ENGLISH_GUESS
 
-    def filter_pattern(self, pattern: str, word: str) -> None:
+    def filter_solutions(self, pattern: str, guess: str) -> None:
+        """
+        filter solution group based on the pattern user got from Wordle.
+        :param pattern: a string of 5 {0,1,2}.
+        :param guess: the guess
+        """
         # letters that have to appear exactly number of times.
         if self.hebrew:
-            self.letters = [HEBREW_LETTERS] * WORD_LENGTH
+            letters = [HEBREW_LETTERS] * WORD_LENGTH
         else:
-            self.letters = [ENGLISH_LETTERS] * WORD_LENGTH
+            letters = [ENGLISH_LETTERS] * WORD_LENGTH
         exactly = defaultdict(int)
         # letters that have to appear at least number of times
         at_least = defaultdict(int)
         greys = []
         for j in range(len(pattern)):
             if pattern[j] == GREY:
-                self.letters[j] = self.letters[j].replace(word[j], "")
-                greys.append(word[j])
+                letters[j] = letters[j].replace(guess[j], "")
+                greys.append(guess[j])
             elif pattern[j] == YELLOW:
-                if word[j] in greys:
+                if guess[j] in greys:
                     return
-                self.letters[j] = self.letters[j].replace(word[j], "")
-                at_least[word[j]] += 1
+                letters[j] = letters[j].replace(guess[j], "")
+                at_least[guess[j]] += 1
             elif pattern[j] == GREEN:
-                self.letters[j] = word[j]
-                at_least[word[j]] += 1
+                letters[j] = guess[j]
+                at_least[guess[j]] += 1
         # if a letter was greyed & yellowed / green, move it to "exactly".
         for letter in greys:
             if at_least[letter] > 0:
@@ -122,23 +134,29 @@ class WordleSolver:
         greys = [x for x in greys if not at_least[x] > 0]
         # remove all completely greyed chars from possible letters.
         for j in range(WORD_LENGTH):
-            self.letters[j] = ''.join('' if c in greys else c for c in self.letters[j])
+            letters[j] = ''.join('' if c in greys else c for c in letters[j])
         atLeast_filters = [(k, v) for k, v in at_least.items() if v > 0]
         exactly_filters = [(k, v) for k, v in exactly.items() if v > 0]
         # filter out words that don't comply with possible chars for each letter.
         r = re.compile(
-            REGEX.format(a=self.letters[0], b=self.letters[1], c=self.letters[2], d=self.letters[3], e=self.letters[4]))
+            REGEX.format(a=letters[0], b=letters[1], c=letters[2], d=letters[3], e=letters[4]))
         self.solutions = list(filter(r.match, self.solutions))
-        # filter out based on atLeast and exactly dicts.
+        # filter out based on atLeast and exactly letter count
         self.solutions = list(filter(lambda solution: atLeast_filter(solution, atLeast_filters), self.solutions))
         self.solutions = list(filter(lambda solution: exactly_filter(solution, exactly_filters), self.solutions))
 
     def calculate_entropy(self, guess: str) -> float:
+        """
+        calculate entropy of a given guess - how much information will be attained from guessing the guess in average.
+        a score of 1 means halving the solution group once.
+        :param guess:
+        :return: the entropy of the guess.
+        """
         self.patterns = dict.fromkeys(self.patterns, 0)
+        # count how many solutions go to each pattern the guess can generate
         for solution in self.solutions:
             pattern = get_pattern(guess, solution)
             self.patterns[pattern] += 1
-        # calculate the entropy of the guess
         solutions_count = len(self.solutions)
         entropy = 0
         for pattern in self.patterns:
@@ -147,27 +165,40 @@ class WordleSolver:
                 entropy += probability * math.log2(1 / probability)
         return entropy
 
-    def solve(self, solution: str) -> (str, int):
+    def virtual_solve(self, solution: str) -> int:
+        """
+        tests the program on a given solution - the program will try to solve the game.
+        :param solution: given solution
+        :return: how many guesses it took to solve the given solution.
+                 -1 if program failed to find given solution in under 6 guesses.
+        """
         for i in range(NUM_OF_TRIES):
             if len(self.solutions) == 1:
-                return self.solutions[0], i + 1
+                return i + 1
             if i == 0:
-                max_word = "raise"
+                max_word = self.first_words[0][0]
             else:
-                max_entropy = 0
+                max_entropy = -1
                 max_word = ""
+                # find the word with the highest entropy and guess it.
                 for word in self.guesses:
                     entropy = self.calculate_entropy(word)
                     if entropy > max_entropy:
                         max_word = word
                         max_entropy = entropy
+                print(max_word)
             pattern = get_pattern(max_word, solution)
             if pattern == GREEN * WORD_LENGTH:
-                return max_word, i + 1
-            self.filter_pattern(pattern, max_word)
-        return None, NUM_OF_TRIES
+                return i + 1
+            self.filter_solutions(pattern, max_word)
+        return -1
 
-    def interactive_solve(self):
+    def interactive_solve(self) -> (str, int):
+        """
+        interactive solve - user enter his guess and the pattern the official wordle site returned him,
+        and the program will suggest the top 5 words to guess.
+        :return: tuple (final solution, number of guesses)
+        """
         for i in range(NUM_OF_TRIES):
             # stop cases: potential solution group size is lower than 2.
             if len(self.solutions) == 1:
@@ -193,10 +224,10 @@ class WordleSolver:
             pattern = input("Enter pattern: (0 for grey, 1 for yellow, 2 for green. i.e \'00112\')\n")
             if pattern == GREEN * WORD_LENGTH:
                 return guess, i + 1
-            self.filter_pattern(pattern, guess)
+            self.filter_solutions(pattern, guess)
         return None, NUM_OF_TRIES
 
 
 if __name__ == '__main__':
-    solver = WordleSolver()
-    solver.interactive_solve()
+    solver = WordleSolver(True)
+    print(solver.interactive_solve())
