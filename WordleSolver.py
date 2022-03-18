@@ -6,12 +6,12 @@ from collections import defaultdict
 WORD_LENGTH = 5
 NUM_OF_TRIES = 6
 HEBREW_LETTERS = "אבגדהוזחטיכלמנסעפצקרשת"
-HEBREW_GUESSES = "hebrewwordlist.txt"
-HEBREW_SOLUTIONS = "hebrewwordlist.txt"
+HEBREW_GUESSES = "HebrewSolutionList.txt"
+HEBREW_SOLUTIONS = "HebrewSolutionList.txt"
 ENGLISH_LETTERS = "abcdefghijklmnopqrstuvwxyz"
-ENGLISH_GUESSES = "englishwordlist.txt"
-ENGLISH_SOLUTIONS = "englishwordlist.txt"
-FIRST_ENGLISH_GUESS = [('raise', 5.877), ('slate', 5.855), ('crate', 5.834), ('irate', 5.831), ('trace', 5.830)]
+ENGLISH_GUESSES = "EnglishGuessList.txt"
+ENGLISH_SOLUTIONS = "EnglishSolutionList.txt"
+FIRST_ENGLISH_GUESS = [('soare', 5.885), ('roate', 5.884), ("raise", 5.877), ('reast', 5.867), ('raile', 5.865), ('slate', 5.855), ('salet', 5.836)]
 FIRST_HEBREW_GUESS = [('מילות', 5.985), ('מניות', 5.983), ('הורית', 5.960), ('מונית', 5.938), ('משרות', 5.935)]
 FINAL_TO_REGULAR = {'ך': 'כ', 'ם': 'מ', 'ן': 'נ', 'ף': 'פ', 'ץ': 'צ'}
 REGULAR_TO_FINAL = {'כ': 'ך', 'מ': 'ם', 'נ': 'ן', 'פ': 'ף', 'צ': 'ץ'}
@@ -87,6 +87,46 @@ def get_pattern(guess: str, solution: str) -> str:
     return ''.join(pattern)
 
 
+def filterPattern(pattern, word, wordlist) -> list[str]:
+    # letters = [HEBREW_LETTERS, HEBREW_LETTERS, HEBREW_LETTERS, HEBREW_LETTERS, HEBREW_LETTERS]
+    letters = [ENGLISH_LETTERS, ENGLISH_LETTERS, ENGLISH_LETTERS, ENGLISH_LETTERS, ENGLISH_LETTERS]
+    # letters that have to appear exactly number of times.
+    exactly = defaultdict(int)
+    # letters that have to appear at least number of times
+    at_least = defaultdict(int)
+    greys = []
+    for j in range(5):
+        if pattern[j] == GREY:
+            letters[j] = letters[j].replace(word[j], "")
+            greys.append(word[j])
+        elif pattern[j] == YELLOW:
+            if word[j] in greys:
+                return []
+            letters[j] = letters[j].replace(word[j], "")
+            at_least[word[j]] += 1
+        elif pattern[j] == GREEN:
+            letters[j] = word[j]
+            at_least[word[j]] += 1
+    # if a letter was greyed & yellowed / green, move it to "exactly".
+    for letter in greys:
+        if at_least[letter] > 0:
+            exactly[letter] = at_least[letter]
+    greys = [x for x in greys if not at_least[x] > 0]
+    # remove all completely greyed chars from possible letters.
+    for j in range(5):
+        letters[j] = ''.join('' if c in greys else c for c in letters[j])
+    atLeast_filters = [(k, v) for k, v in at_least.items() if v > 0]
+    exactly_filters = [(k, v) for k, v in exactly.items() if v > 0]
+    # filter out words that don't comply with possible chars for each letter.
+    r = re.compile(REGEX.format(a=letters[0], b=letters[1], c=letters[2], d=letters[3], e=letters[4]))
+    filtered_words = list(filter(r.match, wordlist))
+    # filter out based on atLeast and exactly dicts.
+    filtered_words = list(filter(lambda word: atLeast_filter(word, atLeast_filters), filtered_words))
+    filtered_words = list(filter(lambda word: exactly_filter(word, exactly_filters), filtered_words))
+    # filtered_words = list(filter(lambda word: word_filter(word, at_least, exactly, letters), wordlist))
+    return filtered_words
+
+
 class WordleSolver:
     def __init__(self, hebrew: bool = False):
         self.patterns = {''.join(i): 0 for i in itertools.product("012", repeat=WORD_LENGTH)}
@@ -97,7 +137,7 @@ class WordleSolver:
             self.first_words = FIRST_HEBREW_GUESS
         else:
             self.guesses = get_word_list(ENGLISH_GUESSES)
-            self.solutions = get_word_list(ENGLISH_GUESSES)
+            self.solutions = get_word_list(ENGLISH_SOLUTIONS)
             self.first_words = FIRST_ENGLISH_GUESS
 
     def filter_solutions(self, pattern: str, guess: str) -> None:
@@ -169,7 +209,7 @@ class WordleSolver:
         """
         tests the program on a given solution - the program will try to solve the game.
         :param solution: given solution
-        :return: how many guesses it took to solve the given solution.
+        :return: how many guesses it took to solve the given solution, -1 if failed.
                  -1 if program failed to find given solution in under 6 guesses.
         """
         for i in range(NUM_OF_TRIES):
@@ -229,5 +269,5 @@ class WordleSolver:
 
 
 if __name__ == '__main__':
-    solver = WordleSolver(True)
+    solver = WordleSolver(False)  # change to True for Hebrew version
     print(solver.interactive_solve())
