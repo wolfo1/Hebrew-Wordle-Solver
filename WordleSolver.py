@@ -269,5 +269,5 @@ class WordleSolver:
 
 
 if __name__ == '__main__':
-    solver = WordleSolver(False)  # change to True for Hebrew version
+    solver = WordleSolver(True)  # change to False for English version
     print(solver.interactive_solve())
