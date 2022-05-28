@@ -8,24 +8,27 @@ from enum import Enum
 
 WORD_LENGTH = 5
 NUM_OF_TRIES = 6
-HEBREW_LETTERS = "אבגדהוזחטיכלמנסעפצקרשת"
-ENGLISH_LETTERS = "abcdefghijklmnopqrstuvwxyz"
 
-# data files
-HEBREW_GUESSES_PATH = "database/hebrew_solutions.json"
-HEBREW_SOLUTIONS_PATH = "database/hebrew_solutions.json"
+# Hebrew meduyeket (מדויקת) data files
+HEBREW_GUESSES_PATH = "database/hebrew_guesses.json"  # 3k possible guesses
+MEDUYEKET_SOLUTIONS_PATH = "database/hebrew_solutions_meduyeket.json"
+FIRST_WORDS_MEDUYEKET_PATH = "database/heb_first_words_meduyeket.json"
+# English wordle data files
 ENGLISH_GUESSES_PATH = "database/english_guesses.json"
 ENGLISH_SOLUTIONS_PATH = "database/english_solutions.json"
 FIRST_WORDS_ENGLISH_PATH = "database/english_first_word_scores.json"
-FIRST_WORDS_HEBREW_PATH = "database/hebrew_first_word_scores.json"
 
-# dict from finalised letters to regular and vice versa
+# dict from finalized letters to regular and vice versa
+ENGLISH_LETTERS = "abcdefghijklmnopqrstuvwxyz"
+HEBREW_LETTERS = "אבגדהוזחטיכלמנסעפצקרשת"
 FINAL_TO_REGULAR = {'ך': 'כ', 'ם': 'מ', 'ן': 'נ', 'ף': 'פ', 'ץ': 'צ'}
 REGULAR_TO_FINAL = {'כ': 'ך', 'מ': 'ם', 'נ': 'ן', 'פ': 'ף', 'צ': 'ץ'}
 REGEX = "[{a}]{{1}}[{b}]{{1}}[{c}]{{1}}[{d}]{{1}}[{e}]{{1}}"
 GREEN = '2'
 YELLOW = '1'
 GREY = '0'
+# console msgs
+START_PROMPT = "Choose mode:\n0: Hebrew.\n1: English.\n"
 FAIL_MSG = "Failed to find the word in number of tries: "
 
 
@@ -154,18 +157,18 @@ class WordleSolver:
         self.language = language
         if self.language == Language.HEBREW:
             self.guesses = load_words_JSON(HEBREW_GUESSES_PATH)
-            self.solutions = load_words_JSON(HEBREW_SOLUTIONS_PATH)
-            self.first_words = load_words_JSON(FIRST_WORDS_HEBREW_PATH)
+            self.solutions = load_words_JSON(MEDUYEKET_SOLUTIONS_PATH)
+            self.first_words = load_words_JSON(FIRST_WORDS_MEDUYEKET_PATH)[:9]
         else:
             self.guesses = load_words_JSON(ENGLISH_GUESSES_PATH)
             self.solutions = load_words_JSON(ENGLISH_SOLUTIONS_PATH)
-            self.first_words = load_words_JSON(FIRST_WORDS_ENGLISH_PATH)
+            self.first_words = load_words_JSON(FIRST_WORDS_ENGLISH_PATH)[:9]
 
     def process_heb_word(self, word: str) -> str:
         """
-        turn the last letter to finalised ("ot sofit") later or vice versa.
+        turn the last letter to finalized ("ot sofit") later or vice versa.
         :param word: a hebrew word
-        :return: the word with a finalised / de-finalised last letter.
+        :return: the word with a finalized / de-finalized last letter.
         """
         if self.language != Language.HEBREW:
             return word
@@ -203,7 +206,7 @@ class WordleSolver:
         for guess in self.guesses:
             res.append((guess, round(self.fast_entropy(guess), 4)))
         res.sort(key=lambda x: x[1], reverse=True)
-        filepath = [FIRST_WORDS_ENGLISH_PATH, FIRST_WORDS_HEBREW_PATH][self.language == Language.HEBREW]
+        filepath = [FIRST_WORDS_ENGLISH_PATH, FIRST_WORDS_MEDUYEKET_PATH][self.language == Language.HEB_WORDLE]
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump({"words": res}, f, ensure_ascii=False)
 
@@ -249,7 +252,7 @@ class WordleSolver:
                 print("potential solutions are:\n", [self.process_heb_word(word) for word in self.solutions])
             # the top guesses are pre-calculated for the first word.
             elif i == 0:
-                print("Top guesses:\n", [(self.process_heb_word(word), score) for word, score in self.first_words[:5]])
+                print("Top guesses:\n", [(self.process_heb_word(word), score) for word, score in self.first_words])
             # else, calculate what are the best cases and print them to the user.
             else:
                 results = []
@@ -268,9 +271,17 @@ class WordleSolver:
         return FAIL_MSG, NUM_OF_TRIES
 
 
-if __name__ == '__main__':
-    solver = WordleSolver(Language.ENGLISH)  # choose between Language.HEBREW to Language.ENGLISH
+def run_solver(language: Language) -> None:
+    solver = WordleSolver(language)
     print(solver.interactive_solve())
-    # solver.virtual_solve("חורבן")
-    # solver.calculate_first_word_fast()
-    # solver.calculate_first_word_fast()
+
+
+if __name__ == '__main__':
+    language = Language.HEBREW
+    # while True:
+    #     try:
+    #         langauge = Language(int(input(START_PROMPT)))
+    #         break
+    #     except ValueError:
+    #         continue
+    run_solver(language)
